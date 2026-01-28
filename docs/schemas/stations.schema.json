@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/MorpheusXAUT/vacs-data/refs/heads/main/docs/schemas/stations.schema.json",
+  "title": "vacs dataset - station configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["stations"],
+  "properties": {
+    "stations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Station" },
+      "minItems": 1
+    }
+  },
+  "$defs": {
+    "StationId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Station identifier. Can reference stations from own and different FIRs, but the station identifier must already exist in the global dataset. Must be globally unique and should start with the two-letter country code of the FIR it is defined in, e.g. LOWW_APP, LOVV_N1."
+    },
+    "PositionId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Position identifier. Should match a VATSIM position as defined in your sectorfile. Must start with your FIR's two-letter country code and be globally unique, e.g. LOWW_APP, LOWW_CTR."
+    },
+    "Station": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/StationId" },
+        "parent_id": { "$ref": "#/$defs/StationId" },
+        "controlled_by": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PositionId" },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "not": { "required": ["parent_id"] }
+          },
+          "then": {
+            "required": ["controlled_by"]
+          }
+        }
+      ]
+    }
+  }
+}

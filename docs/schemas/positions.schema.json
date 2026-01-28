@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/MorpheusXAUT/vacs-data/refs/heads/main/docs/schemas/positions.schema.json",
+  "title": "vacs dataset - position configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["positions"],
+  "properties": {
+    "positions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Position" },
+      "minItems": 1
+    }
+  },
+  "$defs": {
+    "PositionId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Position identifier. Should match a VATSIM position as defined in your sectorfile. Must start with your FIR's two-letter country code and be globally unique, e.g. LOWW_APP, LOWW_CTR"
+    },
+    "ProfileId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Profile identifier, used to reference profile in positions configuration. Must start with your FIR's two-letter country code and be globally unique, e.g. LOVV, LOWW."
+    },
+    "FacilityType": {
+      "type": "string",
+      "enum": [
+        "RMP",
+        "DEL",
+        "GND",
+        "TWR",
+        "APP",
+        "DEP",
+        "CTR",
+        "FSS",
+        "RDO",
+        "FMP"
+      ],
+      "description": "VATSIM facility type code."
+    },
+    "Position": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "prefixes", "frequency", "facility_type"],
+      "properties": {
+        "id": { "$ref": "#/$defs/PositionId" },
+        "prefixes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "frequency": {
+          "type": "string",
+          "pattern": "^\\d{3}\\.\\d{3}$",
+          "description": "Frequency in XXX.XXX format (e.g. 119.400)."
+        },
+        "facility_type": { "$ref": "#/$defs/FacilityType" },
+        "profile_id": { "$ref": "#/$defs/ProfileId" }
+      }
+    }
+  }
+}
