@@ -39,15 +39,21 @@ JSON representation:
 }
 ```
 
+## Key Terms
+
+- **Station**: A callable frequency/service (e.g., `LOWW_TWR`, `LOWW_N1`)
+- **Position**: A controller login that can cover one or more stations (e.g., `LOWW_TWR` or `LOVV_N_CTR`)
+- **Coverage**: Which position is currently handling a station and will receive calls for it
+
 ## Station Fields
 
 Each station entry describes one callable station.
 
-| Field           | Type             | Required      | Description                                                                                                          |
-| :-------------- | :--------------- | :------------ | :------------------------------------------------------------------------------------------------------------------- |
-| `id`            | String           | Yes           | Globally unique station identifier (e.g., `LOWW_TWR`, `LOVV_N1`). Must start with the FIR's two-letter country code. |
-| `parent_id`     | String           | No            | Optional parent station ID, used to express hierarchical relationships between stations.                             |
-| `controlled_by` | Array of strings | Conditionally | List of position IDs that explicitly control this station. Required unless `parent_id` is set.                       |
+| Field           | Type             | Required                 | Description                                                                                                             |
+| :-------------- | :--------------- | :----------------------- | :---------------------------------------------------------------------------------------------------------------------- |
+| `id`            | String           | Yes                      | Globally unique station identifier (e.g., `LOWW_TWR`, `LOVV_N1`). Must start with the FIR's two-letter country code.    |
+| `parent_id`     | String           | No                       | Optional parent station ID, used to inherit coverage from another station.                                              |
+| `controlled_by` | Array of strings | If no `parent_id` is set | Ordered list of Position IDs used for coverage resolution (highest priority first). Required unless `parent_id` is set. |
 
 ## Validation Rules
 
@@ -91,79 +97,91 @@ The effective coverage list for a station is resolved as follows:
 3. Repeat recursively until no `parent_id` remains
 4. The final list is evaluated in order for online positions
 
+If a position ID appears multiple times in the final list (e.g. because it is listed in `controlled_by` for multiple stations in the inheritance chain), only the first occurrence is used.
+
+## Common pitfalls
+
+When configuring stations, watch out for these issues:
+
+- **Order matters**: put the position with the highest priority first
+- **Missing positions**: make sure all positions referenced by `controlled_by` exist
+- **Circular inheritance**: if a `parent_id` points to a station already processed in the inheritance chain, the coverage resolution will stop at that point and the resulting coverage list will be incomplete
+
 ## Examples
 
-### Station controlled by a single position
+### Simple fallback coverage
 
-TOML
-
-```toml
-[[stations]]
-id = "LOVV_I_CTR"
-controlled_by = ["LOVV_I_CTR"]
-```
-
-JSON
-
-```json
-{
-  "stations": [
-    {
-      "id": "LOVV_I_CTR",
-      "controlled_by": ["LOVV_I_CTR"]
-    }
-  ]
-}
-```
-
-### Stations controlled by multiple positions
-
-TOML
+This example defines a station that is normally handled by one position, but can be covered by another if the primary controller is offline.
 
 ```toml
 [[stations]]
-id = "LOWW_F_APP"
-controlled_by = ["LOWW_F_APP", "LOWW_D_APP"]
-
-[[stations]]
-id = "LOWW_D_APP"
-controlled_by = ["LOWW_D_APP", "LOWW_F_APP"]
+id = "LOWW_TWR"
+controlled_by = ["LOWW_TWR", "LOWW_E_TWR"]
 ```
 
-JSON
+What this means in practice:
 
-```json
-{
-  "stations": [
-    {
-      "id": "LOWW_F_APP",
-      "controlled_by": ["LOWW_F_APP", "LOWW_D_APP"]
-    },
-    {
-      "id": "LOWW_D_APP",
-      "controlled_by": ["LOWW_D_APP", "LOWW_F_APP"]
-    }
-  ]
-}
-```
+- If `LOWW_TWR` is online, it covers the Tower station
+- If `LOWW_TWR` goes offline, but `LOWW_E_TWR` is online, coverage falls back to `LOWW_E_TWR`
+- If both are online, `LOWW_TWR` has priority over `LOWW_E_TWR` and thus covers the station
 
-### Inheritance without explicit additional coverage
+### Coverage chain using parent ID
 
-TOML
+This example defines a station with coverage inheritance using a `parent_id`.
 
 ```toml
 [[stations]]
-id = "LOVV_N2"
-parent_id = "LOVV_N3"
+id = "LOWW_DEL"
+parent_id = "LOWW_GND"
+controlled_by = ["LOWW_DEL"]
 
 [[stations]]
-id = "LOVV_N3"
-parent_id = "LOVV_N4"
+id = "LOWW_GND"
+parent_id = "LOWW_TWR"
+controlled_by = ["LOWW_GND", "LOWW_W_GND"]
 
 [[stations]]
-id = "LOVV_N4"
-parent_id = "LOVV_N5"
+id = "LOWW_TWR"
+controlled_by = ["LOWW_TWR", "LOWW_E_TWR"]
+```
 
+What this means in practice:
+
+- `LOWW_DEL` is controlled by the same-named position `LOWW_DEL`
+- Since `LOWW_DEL` has `LOWW_GND` as a parent, its coverage list is extended with the coverage list of `LOWW_GND` (`LOWW_GND`, `LOWW_W_GND`)
+- Since `LOWW_GND` has `LOWW_TWR` as a parent, its coverage list is extended with the coverage list of `LOWW_TWR` (`LOWW_TWR`, `LOWW_E_TWR`)
+- The final coverage list for `LOWW_DEL` is `LOWW_DEL`, `LOWW_GND`, `LOWW_W_GND`, `LOWW_TWR`, `LOWW_E_TWR`
+- If no lower level position is online, `LOWW_DEL` will be covered by `LOWW_E_TWR`
+
+### Stable deduplication
+
+In this example, some positions appear both in a station and in its parent. This is allowed and expected. The final coverage list is deduplicated in a stable manner, meaning that the order of the remaining elements is preserved and only the first occurrence of each position is kept.
+
+```toml
+[[stations]]
+id = "LOWW_W_GND"
+parent_id = "LOWW_GND"
+controlled_by = ["LOWW_W_GND", "LOWW_GND", "LOWW_TWR", "LOWW_E_TWR"]
+
+[[stations]]
+id = "LOWW_GND"
+parent_id = "LOWW_TWR"
+controlled_by = ["LOWW_GND", "LOWW_W_GND", "LOWW_E_TWR", "LOWW_TWR"]
+```
+
+What this means in practice:
+
+- `LOWW_W_GND` is controlled by `LOWW_W_GND`, `LOWW_GND`, `LOWW_TWR` and `LOWW_E_TWR` in that order
+- Since `LOWW_W_GND` has `LOWW_GND` as a parent, its coverage list is extended with the coverage list of `LOWW_GND` (`LOWW_GND`, `LOWW_W_GND`, `LOWW_E_TWR`, `LOWW_TWR`)
+- The parent station's coverage is added to the end of the list, resulting in `LOWW_W_GND`, `LOWW_GND`, `LOWW_TWR`, `LOWW_E_TWR`, `LOWW_GND`, `LOWW_W_GND`, `LOWW_E_TWR`, `LOWW_TWR`
+- After stable deduplication, the final coverage list for `LOWW_W_GND` is `LOWW_W_GND`, `LOWW_GND`, `LOWW_TWR`, `LOWW_E_TWR`
+- This ensures that coverage priority is properly maintained even if stations define overlapping coverage lists
+
+### Station without its own coverage list
+
+In this example, some stations do not define their own coverage list, but instead rely entirely on their parents' coverage list.
+
+```toml
 [[stations]]
 id = "LOVV_N5"
 parent_id = "LOVV_N6"
@@ -185,88 +203,9 @@ controlled_by = [
 ]
 ```
 
-JSON
+What this means in practice:
 
-```json
-{
-  "stations": [
-    {
-      "id": "LOVV_N2",
-      "parent_id": "LOVV_N3"
-    },
-    {
-      "id": "LOVV_N3",
-      "parent_id": "LOVV_N4"
-    },
-    {
-      "id": "LOVV_N4",
-      "parent_id": "LOVV_N5"
-    },
-    {
-      "id": "LOVV_N5",
-      "parent_id": "LOVV_N6"
-    },
-    {
-      "id": "LOVV_N6",
-      "parent_id": "LOVV_N7"
-    },
-    {
-      "id": "LOVV_N7",
-      "controlled_by": [
-        "LOVV_NU_CTR",
-        "LOVV_EU_CTR",
-        "LOVV_U_CTR",
-        "LOVV_N_CTR",
-        "LOVV_E_CTR",
-        "LOVV_CTR",
-        "LOVV_C_CTR"
-      ]
-    }
-  ]
-}
-```
-
-### Inheritance with additional coverage
-
-TOML
-
-```toml
-[[stations]]
-id = "LOWW_DEL"
-parent_id = "LOWW_GND"
-controlled_by = ["LOWW_DEL"]
-
-[[stations]]
-id = "LOWW_GND"
-parent_id = "LOWW_TWR"
-controlled_by = ["LOWW_GND", "LOWW_W_GND", "LOWW_E_TWR", "LOWW_TWR"]
-
-[[stations]]
-id = "LOWW_TWR"
-parent_id = "LOWW_APP"
-controlled_by = ["LOWW_TWR", "LOWW_E_TWR"]
-```
-
-JSON
-
-```json
-{
-  "stations": [
-    {
-      "id": "LOWW_DEL",
-      "parent_id": "LOWW_GND",
-      "controlled_by": ["LOWW_DEL"]
-    },
-    {
-      "id": "LOWW_GND",
-      "parent_id": "LOWW_TWR",
-      "controlled_by": ["LOWW_GND", "LOWW_W_GND", "LOWW_E_TWR", "LOWW_TWR"]
-    },
-    {
-      "id": "LOWW_TWR",
-      "parent_id": "LOWW_APP",
-      "controlled_by": ["LOWW_TWR", "LOWW_E_TWR"]
-    }
-  ]
-}
-```
+- `LOVV_N5` has no `controlled_by` list of its own, so its coverage list is determined entirely by its parent `LOVV_N6`
+- `LOVV_N6` has no coverage list of its own either, but defines `LOVV_N7` as its parent
+- `LOVV_N7` is controlled by `LOVV_NU_CTR`, `LOVV_EU_CTR`, `LOVV_U_CTR`, `LOVV_N_CTR`, `LOVV_E_CTR`, `LOVV_CTR`, `LOVV_C_CTR`
+- The final coverage list for `LOVV_N5` (and `LOVV_N6`) is `LOVV_NU_CTR`, `LOVV_EU_CTR`, `LOVV_U_CTR`, `LOVV_N_CTR`, `LOVV_E_CTR`, `LOVV_CTR`, `LOVV_C_CTR`
