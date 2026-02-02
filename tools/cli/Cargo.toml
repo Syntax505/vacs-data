@@ -12,5 +12,6 @@ path = "src/main.rs"
 [dependencies]
 clap = { workspace = true }
 vacs-data-diagnostics = { workspace = true }
+vacs-data-euroscope = { workspace = true }
 vacs-data-validator = { workspace = true }
 vacs-data-vatglasses = { workspace = true }

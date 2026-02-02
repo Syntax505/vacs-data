@@ -88,6 +88,10 @@ pub enum ImportCommand {
         #[arg(short, long)]
         output: Option<PathBuf>,
 
+        /// Prefixes to filter positions by
+        #[arg(short, long, value_name = "PREFIX")]
+        prefixes: Option<Vec<String>>,
+
         /// Overwrite existing files
         #[arg(long)]
         overwrite: bool,

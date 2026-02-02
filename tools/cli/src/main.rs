@@ -49,6 +49,7 @@ pub fn main() {
                     output_pos,
                     input,
                     output,
+                    prefixes,
                     overwrite,
                 },
         } => {
@@ -60,6 +61,11 @@ pub fn main() {
                 log::error("Missing output path. Either provide OUTPUT or use --o/--output.");
                 std::process::exit(2);
             };
+            let prefixes = prefixes.unwrap_or_default();
+
+            if vacs_data_euroscope::parse(&input, &output, &prefixes, overwrite).is_err() {
+                std::process::exit(1);
+            }
         }
     }
 }
