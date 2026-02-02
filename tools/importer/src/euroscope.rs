@@ -14,6 +14,7 @@ pub fn parse(
     output: &PathBuf,
     prefixes: &[String],
     overwrite: bool,
+    merge: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     log::info(format_args!(
         "Parsing EuroScope sectorfile data from {input:?} to {output:?}"
@@ -23,14 +24,12 @@ pub fn parse(
     crate::ensure_output_directory(output)?;
 
     let output_positions =
-        crate::check_output_file(output, "positions.toml", "Positions", overwrite)?;
+        crate::check_output_file(output, "positions.toml", "Positions", overwrite, merge)?;
 
     let file = match std::fs::File::open(input) {
         Ok(f) => f,
         Err(err) => {
-            log::error(format_args!(
-                "Failed to open input file {input:?}: {err:?}"
-            ));
+            log::error(format_args!("Failed to open input file {input:?}: {err:?}"));
             return Err(err.into());
         }
     };
@@ -73,6 +72,29 @@ pub fn parse(
             }
             positions.push(position);
         }
+    }
+
+    if merge && output_positions.exists() {
+        log::info(format_args!(
+            "Reading existing positions from {output_positions:?}"
+        ));
+        let content = std::fs::read_to_string(&output_positions)?;
+        let mut existing_config: PositionConfigFile = toml::from_str(&content)?;
+        let existing_ids: HashSet<_> = existing_config
+            .positions
+            .iter()
+            .map(|p| p.id.clone())
+            .collect();
+
+        let mut added_count = 0;
+        for position in positions {
+            if !existing_ids.contains(&position.id) {
+                existing_config.positions.push(position);
+                added_count += 1;
+            }
+        }
+        positions = existing_config.positions;
+        log::info(format_args!("Merged {added_count} new positions"));
     }
 
     positions.sort_by(|a, b| {

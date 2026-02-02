@@ -12,6 +12,7 @@ pub fn parse(
     input: &PathBuf,
     output: &PathBuf,
     overwrite: bool,
+    merge: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     log::info(format_args!(
         "Parsing VATglasses data from {input:?} to {output:?}"
@@ -20,10 +21,11 @@ pub fn parse(
     crate::check_input_exists(input)?;
     crate::ensure_output_directory(output)?;
 
-    let output_stations = crate::check_output_file(output, "stations.toml", "Stations", overwrite)?;
+    let output_stations =
+        crate::check_output_file(output, "stations.toml", "Stations", overwrite, merge)?;
 
     let output_positions =
-        crate::check_output_file(output, "positions.toml", "Positions", overwrite)?;
+        crate::check_output_file(output, "positions.toml", "Positions", overwrite, merge)?;
 
     let file = match std::fs::File::open(input) {
         Ok(f) => f,
@@ -55,6 +57,29 @@ pub fn parse(
         }
     };
 
+    if merge && output_stations.exists() {
+        log::info(format_args!(
+            "Reading existing stations from {output_stations:?}"
+        ));
+        let content = std::fs::read_to_string(&output_stations)?;
+        let mut existing_config: StationConfigFile = toml::from_str(&content)?;
+        let existing_ids: HashSet<_> = existing_config
+            .stations
+            .iter()
+            .map(|s| s.id.clone())
+            .collect();
+
+        let mut added_count = 0;
+        for station in stations.stations {
+            if !existing_ids.contains(&station.id) {
+                existing_config.stations.push(station);
+                added_count += 1;
+            }
+        }
+        stations.stations = existing_config.stations;
+        log::info(format_args!("Merged {added_count} new stations"));
+    }
+
     stations.stations.sort_by(|a, b| a.id.cmp(&b.id));
 
     let serialized_stations = match toml::to_string_pretty(&stations) {
@@ -76,6 +101,29 @@ pub fn parse(
             return Err(err.into());
         }
     };
+
+    if merge && output_positions.exists() {
+        log::info(format_args!(
+            "Reading existing positions from {output_positions:?}"
+        ));
+        let content = std::fs::read_to_string(&output_positions)?;
+        let mut existing_config: PositionConfigFile = toml::from_str(&content)?;
+        let existing_ids: HashSet<_> = existing_config
+            .positions
+            .iter()
+            .map(|p| p.id.clone())
+            .collect();
+
+        let mut added_count = 0;
+        for position in positions.positions {
+            if !existing_ids.contains(&position.id) {
+                existing_config.positions.push(position);
+                added_count += 1;
+            }
+        }
+        positions.positions = existing_config.positions;
+        log::info(format_args!("Merged {added_count} new positions"));
+    }
 
     positions.positions.sort_by(|a, b| {
         a.facility_type

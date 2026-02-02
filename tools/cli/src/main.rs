@@ -27,6 +27,7 @@ pub fn main() {
                     input,
                     output,
                     overwrite,
+                    merge,
                 },
         } => {
             let Some(input) = input.or(input_pos) else {
@@ -38,7 +39,7 @@ pub fn main() {
                 std::process::exit(2);
             };
 
-            if vacs_data_importer::vatglasses::parse(&input, &output, overwrite).is_err() {
+            if vacs_data_importer::vatglasses::parse(&input, &output, overwrite, merge).is_err() {
                 std::process::exit(1);
             }
         }
@@ -51,6 +52,7 @@ pub fn main() {
                     output,
                     prefixes,
                     overwrite,
+                    merge,
                 },
         } => {
             let Some(input) = input.or(input_pos) else {
@@ -63,7 +65,8 @@ pub fn main() {
             };
             let prefixes = prefixes.unwrap_or_default();
 
-            if vacs_data_importer::euroscope::parse(&input, &output, &prefixes, overwrite).is_err()
+            if vacs_data_importer::euroscope::parse(&input, &output, &prefixes, overwrite, merge)
+                .is_err()
             {
                 std::process::exit(1);
             }

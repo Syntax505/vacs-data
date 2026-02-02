@@ -32,6 +32,7 @@ pub fn check_output_file(
     filename: &str,
     label: &str,
     overwrite: bool,
+    merge: bool,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let output_path = output_dir.join(filename);
     if output_path.exists() {
@@ -39,9 +40,13 @@ pub fn check_output_file(
             log::warn(format_args!(
                 "Overwriting existing {label} output file {output_path:?}"
             ));
+        } else if merge {
+            log::info(format_args!(
+                "Merging with existing {label} output file {output_path:?}"
+            ));
         } else {
             log::error(format_args!(
-                "{label} output file {output_path:?} already exists"
+                "{label} output file {output_path:?} already exists. Either --merge or --overwrite must be specified."
             ));
             return Err(format!("{label} output file already exists").into());
         }

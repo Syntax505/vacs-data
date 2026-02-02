@@ -66,8 +66,12 @@ pub enum ImportCommand {
         output: Option<PathBuf>,
 
         /// Overwrite existing files
-        #[arg(long)]
+        #[arg(long, conflicts_with = "merge")]
         overwrite: bool,
+
+        /// Merge with existing files
+        #[arg(long, conflicts_with = "overwrite")]
+        merge: bool,
     },
 
     /// Import data from an EuroScope sectorfile, converting it to vacs dataset format
@@ -93,7 +97,11 @@ pub enum ImportCommand {
         prefixes: Option<Vec<String>>,
 
         /// Overwrite existing files
-        #[arg(long)]
+        #[arg(long, conflicts_with = "merge")]
         overwrite: bool,
+
+        /// Merge with existing files
+        #[arg(long, conflicts_with = "overwrite")]
+        merge: bool,
     },
 }
