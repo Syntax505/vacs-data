@@ -33,8 +33,6 @@ jobs:
       draft: ${{ steps.vars.outputs.draft }}
       prerelease: ${{ steps.vars.outputs.prerelease }}
       release_name: ${{ steps.vars.outputs.release_name }}
-      binary_name: ${{ steps.vars.outputs.binary_name }}
-      release_binary_name: ${{ steps.vars.outputs.release_binary_name }}
 
     steps:
       - name: Checkout
@@ -78,18 +76,11 @@ jobs:
             PRERELEASE=false
           fi
 
-          EXT=""
-          if [[ "${{ matrix.platform }}" == *"windows"* ]]; then
-            EXT=".exe"
-          fi
-
           echo "version=$VER"       >> "$GITHUB_OUTPUT"
           echo "tag=$TAG"           >> "$GITHUB_OUTPUT"
           echo "draft=$DRAFT"       >> "$GITHUB_OUTPUT"
           echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
           echo "release_name=$REL_NAME" >> "$GITHUB_OUTPUT"
-          echo "binary_name=vacs-data$EXT" >> "$GITHUB_OUTPUT"
-          echo "release_binary_name=vacs-data-${{ matrix.platform }}$EXT" >> "$GITHUB_OUTPUT"
 
   generate-changelog:
     runs-on: ubuntu-latest
@@ -150,12 +141,23 @@ jobs:
           shared-key: ${{ matrix.platform }}
           workspaces: "tools -> target"
 
+      - name: Set binary name
+        id: vars
+        run: |
+          EXT=""
+          if [[ "${{ matrix.platform }}" == *"windows"* ]]; then
+            EXT=".exe"
+          fi
+
+          echo "binary_name=vacs-data$EXT" >> "$GITHUB_OUTPUT"
+          echo "release_binary_name=vacs-data-${{ matrix.platform }}$EXT" >> "$GITHUB_OUTPUT"
+
       - name: Build binary
         run: cargo build --release --locked --bin vacs-data --target ${{ matrix.target }}
 
-      - name: Rename
+      - name: Rename binary to include platform
         run: |
-          mv "target/${{ matrix.target }}/release/${{ needs.prep.outputs.binary_name }}" "target/${{ matrix.target }}/release/${{ needs.prep.outputs.release_binary_name }}"
+          mv "target/${{ matrix.target }}/release/${{ steps.vars.outputs.binary_name }}" "target/${{ matrix.target }}/release/${{ steps.vars.outputs.release_binary_name }}"
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v6.0.0
@@ -164,14 +166,14 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           path: |
-            tools/target/${{ matrix.target }}/release/${{ needs.prep.outputs.release_binary_name }}
+            tools/target/${{ matrix.target }}/release/${{ steps.vars.outputs.release_binary_name }}
 
       - name: Attest build provenance
         if: ${{ !github.event.repository.private || github.event.repository.owner.type == 'Organization' }}
         uses: actions/attest-build-provenance@v3.2.0
         with:
           subject-path: |
-            tools/target/${{ matrix.target }}/release/${{ needs.prep.outputs.release_binary_name }}
+            tools/target/${{ matrix.target }}/release/${{ steps.vars.outputs.release_binary_name }}
 
   release:
     needs: [prep, generate-changelog, build]
